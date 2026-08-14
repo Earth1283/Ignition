@@ -6,7 +6,8 @@ public enum ConfigCategory {
     FIXES("fixes"),
     GAMEPLAY("gameplay-mechanisms"),
     NETWORK("network"),
-    MISC("misc");
+    MISC("misc"),
+    HARD_DISABLE("hard-disable");
 
     private final String basePath;
 
