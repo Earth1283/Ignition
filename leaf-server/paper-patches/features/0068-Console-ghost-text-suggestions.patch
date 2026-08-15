@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Earth1283 <josephcui921@gmail.com>
+Date: Tue, 9 Nov 2077 00:00:00 +0800
+Subject: [PATCH] Console ghost text suggestions
+
+Adds an opt-in misc.console-ghost-text.enabled option that shows a
+dimmed "ghost text" suggestion ahead of the console cursor as you
+type, predicted from the closest match in console command history
+(fish/zsh-shell style, via JLine's AutosuggestionWidgets). Accept
+with Right arrow or End.
+
+Only enabled when the console terminal is a real PTY that supports
+ANSI escape codes; on a dumb terminal or a plain stdin/stdout pipe it
+logs a warning on startup and leaves ghost text disabled instead,
+unless misc.console-ghost-text.force-enable-on-unsupported-terminal
+is set, in which case it force-enables anyway and warns that the
+console output may look broken since the ANSI escape sequences won't
+be interpreted by a terminal that doesn't support them.
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+
+Additional term under GNU GPLv3 section 7(b):
+
+Any copy or modified version containing a substantial portion of the
+original contributions in this patch must preserve the following
+author attribution in the patch header, source code, or another
+prominent legal notice accompanying the corresponding source:
+
+Original patch by Earth1283 <josephcui921@gmail.com>
+
+diff --git a/src/main/java/com/destroystokyo/paper/console/PaperConsole.java b/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
+index 147b842ed311ab0e1d6f3e71679ec325086b2a55..3f5efdbcbb60faa69cb975bd3ec161f0185cfaaa 100644
+--- a/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
++++ b/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
+@@ -33,7 +33,32 @@
+             builder.parser(new BrigadierConsoleParser(this.server));
+             builder.completionMatcher(new BrigadierCompletionMatcher());
+         }
+-        return super.buildReader(builder);
++        LineReader reader = super.buildReader(builder);
++        // Leaf start - console ghost text suggestions
++        if (org.dreeam.leaf.config.modules.misc.ConsoleGhostText.enabled) {
++            org.jline.terminal.Terminal terminal = reader.getTerminal();
++            String terminalType = terminal.getType();
++            boolean unsupportedTerminal = org.jline.terminal.Terminal.TYPE_DUMB.equals(terminalType) || org.jline.terminal.Terminal.TYPE_DUMB_COLOR.equals(terminalType);
++            if (!unsupportedTerminal) {
++                new org.jline.widget.AutosuggestionWidgets(reader).enable();
++            } else if (org.dreeam.leaf.config.modules.misc.ConsoleGhostText.forceEnableOnUnsupportedTerminal) {
++                org.dreeam.leaf.config.LeafConfig.LOGGER.warn(
++                    "misc.console-ghost-text.force-enable-on-unsupported-terminal is true, so ghost text is being force-enabled " +
++                        "even though the console terminal ({}) was detected as not supporting ANSI codes. If that detection is " +
++                        "correct, the console output will look broken: the raw ANSI escape sequences used to draw the ghost text " +
++                        "will be printed as literal garbage characters instead of being interpreted.",
++                    terminalType);
++                new org.jline.widget.AutosuggestionWidgets(reader).enable();
++            } else {
++                org.dreeam.leaf.config.LeafConfig.LOGGER.warn(
++                    "misc.console-ghost-text.enabled is true, but the console terminal ({}) does not support ANSI codes. " +
++                        "Ghost text suggestions require a real interactive terminal (PTY), not a dumb stdin/stdout pipe. Leaving it disabled. " +
++                        "Set misc.console-ghost-text.force-enable-on-unsupported-terminal to true to override this check.",
++                    terminalType);
++            }
++        }
++        // Leaf end - console ghost text suggestions
++        return reader;
+     }
+
+     @Override

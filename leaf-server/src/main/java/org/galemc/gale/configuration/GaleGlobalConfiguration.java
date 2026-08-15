@@ -88,6 +88,7 @@ public class GaleGlobalConfiguration extends ConfigurationPart {
         public boolean nullIdDisconnections = true; // Gale - Pufferfish - do not log disconnections with null id
         public boolean playerLoginLocations = true; // Gale - JettPack - make logging login location configurable
         public boolean invalidLegacyTextComponent = true; // Leaf - do not log invalid flatten text component parse
+        public boolean unsafeTerrainRead = false; // Leaf - do not log unsafe terrain read during worldgen
 
         public Chat chat;
 

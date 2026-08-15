@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Earth1283 <josephcui921@gmail.com>
+Date: Tue, 9 Nov 2077 00:00:00 +0800
+Subject: [PATCH] Hard disable recipe book unlocking
+
+Adds hard-disable.recipe-book-unlocking.mode, letting recipe book
+discovery bookkeeping be skipped entirely regardless of how players
+craft, smelt, or use knowledge books:
+
+DEFAULT: vanilla behavior.
+NO_OP: never unlock new recipes, skipping the per-craft/smelt/knowledge-book
+discovery checks, the PlayerRecipeDiscoverEvent call, and the resulting
+recipe display/packet work.
+UNLOCK_ALL: every recipe is always shown as unlocked, skipping the same
+bookkeeping without ever persisting the full recipe list into playerdata.
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+
+Additional term under GNU GPLv3 section 7(b):
+
+Any copy or modified version containing a substantial portion of the
+original contributions in this patch must preserve the following
+author attribution in the patch header, source code, or another
+prominent legal notice accompanying the corresponding source:
+
+Original patch by Earth1283 <josephcui921@gmail.com>
+
+diff --git a/net/minecraft/stats/ServerRecipeBook.java b/net/minecraft/stats/ServerRecipeBook.java
+index 95a50f25455ec86f7662e9abd039be17609ed1e4..d96c64fe43c8e788fb5464fd5ac38305d8a3d84d 100644
+--- a/net/minecraft/stats/ServerRecipeBook.java
++++ b/net/minecraft/stats/ServerRecipeBook.java
+@@ -42,6 +42,9 @@
+     }
+
+     public boolean contains(final ResourceKey<Recipe<?>> id) {
++        // Leaf start - hard disable recipe book unlocking
++        if (org.dreeam.leaf.config.modules.harddisable.RecipeBookUnlocking.mode == org.dreeam.leaf.util.RecipeBookUnlockMode.UNLOCK_ALL) return true;
++        // Leaf end - hard disable recipe book unlocking
+         return this.known.contains(id);
+     }
+
+@@ -59,6 +62,9 @@
+     }
+
+     public int addRecipes(final Collection<RecipeHolder<?>> recipes, final ServerPlayer player) {
++        // Leaf start - hard disable recipe book unlocking
++        if (org.dreeam.leaf.config.modules.harddisable.RecipeBookUnlocking.mode != org.dreeam.leaf.util.RecipeBookUnlockMode.DEFAULT) return 0;
++        // Leaf end - hard disable recipe book unlocking
+         List<ClientboundRecipeBookAddPacket.Entry> recipesToAdd = new ArrayList<>();
+
+         for (RecipeHolder<?> recipe : recipes) {
+@@ -86,6 +92,9 @@
+     }
+
+     public int removeRecipes(final Collection<RecipeHolder<?>> recipes, final ServerPlayer player) {
++        // Leaf start - hard disable recipe book unlocking
++        if (org.dreeam.leaf.config.modules.harddisable.RecipeBookUnlocking.mode != org.dreeam.leaf.util.RecipeBookUnlockMode.DEFAULT) return 0;
++        // Leaf end - hard disable recipe book unlocking
+         List<RecipeDisplayId> recipesToRemove = Lists.newArrayList();
+
+         for (RecipeHolder<?> recipe : recipes) {
+@@ -120,6 +129,18 @@
+     public void sendInitialRecipeBook(final ServerPlayer player) {
+         player.connection.send(new ClientboundRecipeBookSettingsPacket(this.getBookSettings().copy()));
+         List<ClientboundRecipeBookAddPacket.Entry> recipesToSend = new ArrayList<>(this.known.size());
++
++        // Leaf start - hard disable recipe book unlocking
++        if (org.dreeam.leaf.config.modules.harddisable.RecipeBookUnlocking.mode == org.dreeam.leaf.util.RecipeBookUnlockMode.UNLOCK_ALL) {
++            for (RecipeHolder<?> recipe : player.level().getServer().getRecipeManager().getRecipes()) {
++                if (recipe.value().isSpecial()) continue;
++                ResourceKey<Recipe<?>> id = recipe.id();
++                this.displayResolver.displaysForRecipe(id, r -> recipesToSend.add(new ClientboundRecipeBookAddPacket.Entry(r, false, this.highlight.contains(id))));
++            }
++            player.connection.send(new ClientboundRecipeBookAddPacket(recipesToSend, true));
++            return;
++        }
++        // Leaf end - hard disable recipe book unlocking
+
+         for (ResourceKey<Recipe<?>> id : this.known) {
+             this.displayResolver.displaysForRecipe(id, r -> recipesToSend.add(new ClientboundRecipeBookAddPacket.Entry(r, false, this.highlight.contains(id))));

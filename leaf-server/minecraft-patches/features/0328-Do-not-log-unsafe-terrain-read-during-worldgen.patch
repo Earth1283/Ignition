@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Earth1283 <josephcui921@gmail.com>
+Date: Tue, 9 Nov 2077 00:00:00 +0800
+Subject: [PATCH] Do not log unsafe terrain read during worldgen
+
+Adds log-to-console.unsafe-terrain-read (default: false), letting the
+"Detected unsafe terrain read during worldgen" warning be suppressed.
+
+This warning is commonly triggered by third-party structure/feature
+datapacks (e.g. Terralith's fortified_village) that read terrain
+outside the write radius guaranteed for the current generation step.
+It does not indicate a Leaf/Paper bug and is not actionable from the
+server side, so by default it is now silenced. It can be re-enabled
+per world/globally to help diagnose datapack terrain-read issues.
+
+Also throttles the warning to once per WorldGenRegion instance instead
+of once per offending read, matching the existing "setBlock in a far
+chunk" warning's throttling behavior, in case it is re-enabled.
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+
+Additional term under GNU GPLv3 section 7(b):
+
+Any copy or modified version containing a substantial portion of the
+original contributions in this patch must preserve the following
+author attribution in the patch header, source code, or another
+prominent legal notice accompanying the corresponding source:
+
+Original patch by Earth1283 <josephcui921@gmail.com>
+
+diff --git a/net/minecraft/server/level/WorldGenRegion.java b/net/minecraft/server/level/WorldGenRegion.java
+index 015539951e2a6af0e7b50c05512d1f6200ef2797..7a9d5c1e3b8f42a6d0c1f7e9b6a4d2c8e5f1a3b7 100644
+--- a/net/minecraft/server/level/WorldGenRegion.java
++++ b/net/minecraft/server/level/WorldGenRegion.java
+@@ -286,9 +286,12 @@ public class WorldGenRegion implements WorldGenLevel {
+         return null;
+     }
+
++    private boolean hasUnsafeTerrainReadWarned = false; // Leaf - do not log unsafe terrain read during worldgen
++
+     private void warnIfReadOutsideWriteZone(final int chunkX, final int chunkZ) {
+         if (this.centerChunkX != chunkX || this.centerChunkZ != chunkZ) {
+-            if (!this.isWithinWriteZone(chunkX, chunkZ)) {
++            if (org.galemc.gale.configuration.GaleGlobalConfiguration.get().logToConsole.unsafeTerrainRead && !this.hasUnsafeTerrainReadWarned && !this.isWithinWriteZone(chunkX, chunkZ)) { // Leaf - do not log unsafe terrain read during worldgen
++                this.hasUnsafeTerrainReadWarned = true; // Leaf - do not log unsafe terrain read during worldgen
+                 int readDistance = Math.max(Math.abs(this.centerChunkX - chunkX), Math.abs(this.centerChunkZ - chunkZ));
+                 String warning = "Detected unsafe terrain read during worldgen: reading from chunk ["
+                     + chunkX

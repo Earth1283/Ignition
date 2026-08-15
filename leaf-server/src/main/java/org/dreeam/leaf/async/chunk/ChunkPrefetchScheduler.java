@@ -1,11 +1,14 @@
 package org.dreeam.leaf.async.chunk;
 
+import ca.spottedleaf.concurrentutil.util.Priority;
+import ca.spottedleaf.moonrise.common.PlatformHooks;
 import it.unimi.dsi.fastutil.longs.Long2LongMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.Vec3;
 import org.dreeam.leaf.config.modules.async.PrefetchChunks;
 import org.dreeam.leaf.world.WorldLoadGate;
@@ -16,8 +19,8 @@ import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Speculatively requests chunks ahead of a player's predicted movement, when the
- * world is idle per {@link WorldLoadGate}. Not yet wired to a vanilla chunk-load
- * call site; see {@link #requestPrefetch}.
+ * world is idle per {@link WorldLoadGate}. Wired from the per-player chunk loader
+ * tick; see {@link #maybePrefetch} and {@link #requestPrefetch}.
  */
 public final class ChunkPrefetchScheduler {
 
@@ -46,13 +49,23 @@ public final class ChunkPrefetchScheduler {
         recordArrivals(state, currentChunk, viewDistance);
         expireOutstanding(state);
 
+        Vec3 position = player.position();
+        Vec3 previousPosition = state.lastPosition;
+        boolean hadPosition = state.hasPosition;
+        state.lastPosition = position;
+        state.hasPosition = true;
+
         if (!WorldLoadGate.isLevelIdle(level)) {
             return;
         }
 
-        Vec3 position = player.position();
-        Vec3 delta = position.subtract(state.lastPosition);
-        state.lastPosition = position;
+        // First sample for this player (or first since lastPosition went stale while the world was busy):
+        // no reference point yet, so skip this tick rather than compute a delta from a stale/zero position.
+        if (!hadPosition) {
+            return;
+        }
+
+        Vec3 delta = position.subtract(previousPosition);
 
         double speed = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (speed < PrefetchChunks.minSpeedBlocksPerTick) {
@@ -166,12 +179,19 @@ public final class ChunkPrefetchScheduler {
         }
         state.outstanding.put(key, MinecraftServer.currentTick + PrefetchChunks.ticketTtlTicks);
         issuedCounter.increment();
-        // Submission pending: moonrise's ChunkTaskScheduler.scheduleChunkTask exists (see 0192) but its lowest
-        // non-blocking Priority constant needs confirming against the applied tree before wiring this call in.
+
+        // Target FEATURES (the last worldgen step, pre-lighting) rather than FULL: this pays for the expensive
+        // part (terrain/structure/carver/feature generation) without the full-chunk ticking lifecycle (entity
+        // loading, POI, border/ticking hooks) that a transient, never-visited chunk gets no benefit from.
+        // Priority.IDLE is the lowest schedulable priority, so this never competes with real chunk work.
+        // addTicket=true keeps the chunk alive only until it reaches FEATURES, then the ticket is released
+        // automatically by the scheduler; the generated chunk stays cached on disk for a fast real load later.
+        PlatformHooks.get().scheduleChunkLoad(level, chunkX, chunkZ, ChunkStatus.FEATURES, true, Priority.IDLE, null);
     }
 
     private static final class PlayerState {
         Vec3 lastPosition = Vec3.ZERO;
+        boolean hasPosition;
         double heading;
         boolean hasHeading;
         final Long2LongMap outstanding = new Long2LongOpenHashMap();

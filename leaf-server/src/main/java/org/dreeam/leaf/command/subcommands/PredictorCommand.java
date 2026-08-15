@@ -66,7 +66,7 @@ public final class PredictorCommand extends PermissionedLeafSubcommand {
             .append(text("  misses: ", GRAY)).append(text(misses, RED))
             .append(text("  cancelled: ", GRAY)).append(text(cancelled, YELLOW)));
         sender.sendMessage(text("  hit rate: ", GRAY).append(getColoredRate(hitRate)));
-        sender.sendMessage(text("(hit = predicted chunk was actually reached before its ticket expired; cancelled = abandoned due to a heading change, not counted against accuracy)", DARK_GRAY));
+        sender.sendMessage(text("(hit = predicted chunk was actually reached before its ticket expired; cancelled = dropped from tracking after a heading change, not counted against accuracy - the underlying chunk load is not cancelled and still completes)", DARK_GRAY));
     }
 
     private static Component getColoredRate(double rate) {

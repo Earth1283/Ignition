@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Earth1283 <josephcui921@gmail.com>
+Date: Tue, 9 Nov 2077 00:00:00 +0800
+Subject: [PATCH] Wire chunk prefetch predictor
+
+Wires org.dreeam.leaf.async.chunk.ChunkPrefetchScheduler into the
+actual chunk lifecycle so async.chunk-prefetch and /leaf predictor
+stats do something:
+
+- ChunkPrefetchScheduler#maybePrefetch is now called once per player
+  per tick from RegionizedPlayerChunkLoader#tick, the existing
+  per-player chunk-loader tick loop. Previously it was never called
+  anywhere, so the predictor was permanently idle and its stats always
+  read 0.0 regardless of configuration.
+- ChunkPrefetchScheduler#removePlayer is now called from
+  ChunkMap#updatePlayerStatus on player removal, alongside the
+  existing removePlayerFromDistanceMaps call, so tracked per-player
+  heading/outstanding-request state is released on disconnect instead
+  of leaking a ServerPlayer per disconnect for the life of the server.
+
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+
+Additional term under GNU GPLv3 section 7(b):
+
+Any copy or modified version containing a substantial portion of the
+original contributions in this patch must preserve the following
+author attribution in the patch header, source code, or another
+prominent legal notice accompanying the corresponding source:
+
+Original patch by Earth1283 <josephcui921@gmail.com>
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+index 4c1d9a6b2e7f38a05c9d6e2b1f4a7c8d9e0b1f3a..8e2a5c7d1b9f46e0a3c8d5f2e1b7a9c4d6f8e0b2 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+@@ -315,6 +315,7 @@ public final class RegionizedPlayerChunkLoader {
+             }
+             loader.update(); // can't invoke plugin logic
+             loader.updateQueues(currTime);
++            org.dreeam.leaf.async.chunk.ChunkPrefetchScheduler.maybePrefetch(player, this.world); // Leaf - chunk prefetch predictor
+         }
+     }
+ 
+diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
+index 3f9d5e1a7c2b48f06d9a3e5c1b7f4d8a2c6e0f9b..9b1f4a6c8e2d05b7a3c9f6e1d4b8a0c5e7f2d9a3 100644
+--- a/net/minecraft/server/level/ChunkMap.java
++++ b/net/minecraft/server/level/ChunkMap.java
+@@ -930,6 +930,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+             }
+ 
+             ca.spottedleaf.moonrise.common.PlatformHooks.get().removePlayerFromDistanceMaps(this.level, player); // Paper - rewrite chunk system
++            org.dreeam.leaf.async.chunk.ChunkPrefetchScheduler.removePlayer(player); // Leaf - chunk prefetch predictor
+         }
+     }
+ 
